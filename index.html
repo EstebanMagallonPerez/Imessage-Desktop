@@ -113,6 +113,9 @@
 				updater.socket.onmessage = function(event) {
 					updater.showMessage(JSON.parse(event.data));
 				}
+				updater.socket.onopen = function (event) {
+					updater.socket.send(["side","blank"]); 
+				};
 			},
 
 			showMessage: function(message) {
@@ -126,6 +129,29 @@
 					}
 					document.getElementById("populateList").innerHTML = fillString;
 				}
+				if (message.type == "thread")
+				{
+					var fillString = "";
+					for(var i =0; i<message.data.length;i++)
+					{
+						fillString+="<div class='messageContainer'>"
+						if(message.data[i].is_from_me == 1)
+						{
+							if(message.data[i].service == "SMS")
+							{
+								fillString+="<li class = 'sent'><div>"+message.data[i].text+"</div></li>";
+							}else{
+								fillString+="<li class = 'sentImessage'><div>"+message.data[i].text+"</div></li>";
+							}
+						}else
+						{
+							fillString+="<li class = 'recieved'><div>"+message.data[i].text+"</div></li>";
+						}
+						fillString+="</div>";
+					}
+					document.getElementById("populateMessages").innerHTML = fillString;
+					document.querySelector(".messageWrapper").scrollTo(0,document.querySelector(".messageWrapper").scrollHeight)
+				}
 				if (message.type == "press"){
 					press(message)
 				}else if (message.type == "release"){
@@ -133,6 +159,12 @@
 				} 
 			}
 		};
+
+		function getMessages(chat_identifier)
+		{
+			numToSend = parseInt(chat_identifier);
+			updater.socket.send(["thread",chat_identifier])
+		}
 
 		function press(data) {
 			if(lookupTable[""+data.scan_code])

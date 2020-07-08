@@ -19,12 +19,7 @@ phoneIP = "10.0.0.227"
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 ssh.connect(phoneIP, username="root", password="alpine")
-command = 'clsms "Test" 5105662843'
-temp = 0
-while temp < 20:
-	ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(command)
-	temp = temp +1
-	time.sleep( 5 )
+command = 'clsms "Test" 5105662843' 
 
 def getSideFromPhone():
 	global ssh
@@ -40,8 +35,27 @@ def getSideFromPhone():
 	for line in ssh_stdout:
 	# Process each line in the remote output
 		output+=line
-	print(output)
+	#print(output)
 	return output
+
+
+def getMessagesFromPhone(chat_identifier):
+	global ssh
+	data = ""
+	error = None
+	print("getting content")
+	ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("sqlite3 -header ../mobile/Library/SMS/sms.db <<EOF\n"+
+				  ".mode insert\n"+
+				  "Select is_from_me,service,text from message, chat, chat_handle_join, chat_message_join where chat.ROWID = chat_handle_join.chat_id AND chat_handle_join.handle_id = message.handle_id AND chat.ROWID = chat_message_join.chat_id AND message_id = message.ROWID AND chat_identifier = '"+chat_identifier+"' ORDER BY date DESC LIMIT 50;\n"+
+				  "EOF\n")
+
+	output = ""
+	for line in ssh_stdout:
+	# Process each line in the remote output
+		output+=line
+	#print("messages are: ",output)
+	return output
+
 
 define("port", default=1111, help="run on the given port", type=int)
 
@@ -89,7 +103,8 @@ def start():
 			KeyboardSocketHandler.waiters.remove(self)
 
 		def on_message(self, message):
-			if message == "getSide":
+			message = message.split(",")
+			if message[0] == "side":
 				output = []
 				data = getSideFromPhone()
 				data = data.split("INSERT INTO \"table\"(ROWID,handle_id,chat_identifier,text) VALUES(")
@@ -97,9 +112,9 @@ def start():
 					if elem == "":
 						continue
 					currentIndex = 0
-					print("elem:",elem)
+					#print("elem:",elem)
 					tempVal = elem.replace("INSERT INTO \"table\"(ROWID,handle_id,chat_identifier,text) VALUES(","").replace(");","")
-					print("tempVal:",tempVal)
+					#print("tempVal:",tempVal)
 					#get row id
 					endIndex = tempVal.index(",")
 					rowID = tempVal[currentIndex:endIndex]
@@ -111,13 +126,43 @@ def start():
 					#get chat idenentifier
 					endIndex = tempVal.index(",",currentIndex)
 					chat_identifier = tempVal[currentIndex:endIndex]
+					chat_identifier = chat_identifier.replace("'","")
 					currentIndex = endIndex+1
 					#get message text
 					text = tempVal[currentIndex:]
-					print(tempVal)
-					print(rowID,handle_id,chat_identifier,text)
+					text = text[1:-2]
+					#print(tempVal)
+					#print(rowID,handle_id,chat_identifier,text)
 					output.append({"rowID":rowID, "handle_id":handle_id, "chat_identifier":chat_identifier,"text":text})
 				self.send_updates({"type":"side","data":output})
+			if message[0] =="thread":
+				output = []
+				data = getMessagesFromPhone(message[1])
+				data = data.split("INSERT INTO \"table\"(is_from_me,service,text) VALUES(")
+				for elem in data:
+					if elem == "":
+						continue
+					currentIndex = 0
+					#print("elem:",elem)
+					tempVal = elem.replace("INSERT INTO \"table\"(is_from_me,service,text) VALUES(","").replace(");","")
+					#print("tempVal:",tempVal)
+					#get is from Me
+					endIndex = tempVal.index(",")
+					is_from_me = tempVal[currentIndex:endIndex]
+					currentIndex = endIndex+1
+					#get service
+					endIndex = tempVal.index(",",currentIndex)
+					service = tempVal[currentIndex:endIndex]
+					service = service.replace("'","")
+					currentIndex = endIndex+1
+					#get message text
+					text = tempVal[currentIndex:]
+					text = text[1:-2]
+					#print(tempVal)
+					#print(is_from_me,service,text)
+					output.append({"is_from_me":is_from_me, "service":service, "text":text})
+				output.reverse()
+				self.send_updates({"type":"thread","data":output})
 
 		@classmethod
 		def send_updates(cls, keypress):
