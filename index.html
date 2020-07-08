@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Messages</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+		<link rel="stylesheet" type="text/css" href="./css/style.css">
+	</head>
+	<body>
+		<div class="pageContainer">
+			<div class="messageList">
+				<ul id="populateList">
+				</ul>
+			</div>
+			<div class="messageView">
+				<div class="messageWrapper">
+					<ul id="populateMessages">
+					</ul>
+				</div>
+				<div class="textBox">
+					<textarea id="textContent" style="padding: 0px;	border: none;width:calc(100% - 50px);float:left;"></textarea>
+					<a href="#" onclick="sendMessage()" style="height:30px;line-height: 30px;float:left;width:50px; background-color:limegreen;color:white;text-align:center;">send</a>
+				</div>
+			</div>
+		</div>
+
+	</body>
+	<!--Express hosts a version of socket.io. Don't use a cdn-->
+	<script>
+		//var computerIP = "your computers IP ADDRESS";
+
+/*
+		var numToSend = -1;
+		var socket = io();
+
+		socket.on('message', function(data){
+			console.log(data);
+			if(data.content == "side")
+			{
+				var fillString = "";
+				for(var i =0;i<data.messages.length;i++)
+				{
+					fillString+="<a class='plainText' href='#' onclick=getMessages('"+data.messages[i].chat_identifier+"')><li><div>"+ data.messages[i].chat_identifier+"</div><div>"+data.messages[i].text+"</div></li><a><hr>";
+				}
+				document.getElementById("populateList").innerHTML = fillString;
+			}
+			if(data.content == "main")
+			{
+				var fillString = "";
+				var messagesToLoad = data.messages.length<20?0:data.messages.length-20;
+				for(var i =messagesToLoad;i<data.messages.length;i++)
+				{
+					fillString+="<div class='messageContainer'>"
+					if(data.messages[i].is_from_me)
+					{
+						if(data.messages[i].service == "SMS")
+						{
+							fillString+="<li class = 'sent'><div>"+data.messages[i].text+"</div></li>";
+						}else{
+							fillString+="<li class = 'sentImessage'><div>"+data.messages[i].text+"</div></li>";
+						}
+					}else
+					{
+						fillString+="<li class = 'recieved'><div>"+data.messages[i].text+"</div></li>";
+					}
+					fillString+="</div>";
+				}
+				document.getElementById("populateMessages").innerHTML = fillString;
+			}
+
+		});
+		function getMessages(chat_identifier)
+		{
+			numToSend = parseInt(chat_identifier);
+			console.log(chat_identifier);
+			console.log(numToSend);
+			socket.emit('requestMessages',chat_identifier);
+		}
+		function sendMessage()
+		{
+			if(numToSend == -1)
+			{
+				alert("Select a chat to send a message");
+				return;
+			}
+			if (isNaN(numToSend))
+			{
+				alert("I said it was a work in progress right? group chats are not currently supported, and neither are emails");
+
+				return;
+			}
+
+
+			var messageInfo = {recipient:numToSend,content:document.getElementById("textContent").value}
+			socket.emit('sendMessage',messageInfo );
+			document.getElementById("textContent").value = "";
+		}*/
+
+
+
+		document.addEventListener('DOMContentLoaded', function(){ 
+			if (!window.console) window.console = {};
+			if (!window.console.log) window.console.log = function() {};
+			updater.start();
+		}, false);
+
+		var updater = {
+			socket: null,
+
+			start: function() {
+				var url = "ws://" + location.host + "/keyboardSocket";
+				updater.socket = new WebSocket(url);
+				updater.socket.onmessage = function(event) {
+					updater.showMessage(JSON.parse(event.data));
+				}
+			},
+
+			showMessage: function(message) {
+				console.log(message)
+				if (message.type == "side")
+				{
+					var fillString = "";
+					for(var i =0;i<message.data.length;i++)
+					{
+						fillString+="<a class='plainText' href='#' onclick=getMessages('"+message.data[i].chat_identifier+"')><li><div>"+ message.data[i].chat_identifier+"</div><div>"+message.data[i].text+"</div></li><a><hr>";
+					}
+					document.getElementById("populateList").innerHTML = fillString;
+				}
+				if (message.type == "press"){
+					press(message)
+				}else if (message.type == "release"){
+					release(message)
+				} 
+			}
+		};
+
+		function press(data) {
+			if(lookupTable[""+data.scan_code])
+			{
+				lookupTable[data.scan_code].className = "key active"
+				lookupTable[data.scan_code].querySelector(".keyOverlay").className = "keyOverlay active"
+			}
+		}
+		function release(data) {
+			if(lookupTable[data.scan_code])
+			{
+				lookupTable[data.scan_code].className = "key"
+				lookupTable[data.scan_code].querySelector(".keyOverlay").className = "keyOverlay inactive"
+			}
+		}
+	</script>
+</html>
