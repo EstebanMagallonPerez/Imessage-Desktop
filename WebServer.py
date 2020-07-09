@@ -14,53 +14,129 @@ from pystray import Icon as icon, Menu as menu, MenuItem as item
 import requests
 import paramiko
 import time
+from win10toast import ToastNotifier
+toaster = ToastNotifier()
 
 phoneIP = "10.0.0.227"
 ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 ssh.connect(phoneIP, username="root", password="alpine")
 command = 'clsms "Test" 5105662843' 
-
-def getSideFromPhone():
-	global ssh
-	data = ""
-	error = None
-	print("getting side")
-	ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("sqlite3 -header ../mobile/Library/SMS/sms.db <<EOF\n"+
-				".mode insert\n"+
-				"Select message.ROWID, message.handle_id, chat_identifier,text from message, chat, chat_handle_join, chat_message_join where chat.ROWID = chat_handle_join.chat_id AND chat_handle_join.handle_id = message.handle_id AND chat.ROWID = chat_message_join.chat_id AND message_id = message.ROWID GROUP BY chat_identifier ORDER BY date DESC;\n"+
-				"EOF\n")
-
-	output = ""
-	for line in ssh_stdout:
-	# Process each line in the remote output
-		output+=line
-	#print(output)
-	return output
-
-
-def getMessagesFromPhone(chat_identifier):
-	global ssh
-	data = ""
-	error = None
-	print("getting content")
-	ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("sqlite3 -header ../mobile/Library/SMS/sms.db <<EOF\n"+
-				  ".mode insert\n"+
-				  "Select is_from_me,service,text from message, chat, chat_handle_join, chat_message_join where chat.ROWID = chat_handle_join.chat_id AND chat_handle_join.handle_id = message.handle_id AND chat.ROWID = chat_message_join.chat_id AND message_id = message.ROWID AND chat_identifier = '"+chat_identifier+"' ORDER BY date DESC LIMIT 50;\n"+
-				  "EOF\n")
-
-	output = ""
-	for line in ssh_stdout:
-	# Process each line in the remote output
-		output+=line
-	#print("messages are: ",output)
-	return output
+currentThreadID = -1
 
 
 define("port", default=1111, help="run on the given port", type=int)
 
 closeThreads =  False
 def start():
+	def getSideFromPhone():
+		global ssh
+		data = ""
+		error = None
+		#print("getting side")
+		ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("sqlite3 -header ../mobile/Library/SMS/sms.db <<EOF\n"+
+					".mode insert\n"+
+					"Select display_name, message.ROWID, message.handle_id, chat_identifier,text from message, chat, chat_handle_join, chat_message_join where chat.ROWID = chat_handle_join.chat_id AND chat_handle_join.handle_id = message.handle_id AND chat.ROWID = chat_message_join.chat_id AND message_id = message.ROWID GROUP BY chat_identifier ORDER BY date DESC;\n"+
+					"EOF\n")
+
+		output = ""
+		for line in ssh_stdout:
+		# Process each line in the remote output
+			output+=line
+			#print(line)
+		#print(output)
+		return output
+
+
+	def getMessagesFromPhone(chat_identifier):
+		global ssh
+		data = ""
+		error = None
+		#print("getting content")
+		ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command("sqlite3 -header ../mobile/Library/SMS/sms.db <<EOF\n"+
+					".mode insert\n"+
+					"Select is_from_me,service,text from message, chat, chat_handle_join, chat_message_join where chat.ROWID = chat_handle_join.chat_id AND chat_handle_join.handle_id = message.handle_id AND chat.ROWID = chat_message_join.chat_id AND message_id = message.ROWID AND chat_identifier = '"+chat_identifier+"' ORDER BY date DESC LIMIT 50;\n"+
+					"EOF\n")
+
+		output = ""
+		for line in ssh_stdout:
+		# Process each line in the remote output
+			output+=line
+		#print("messages are: ",output)
+		return output
+
+	def updateSide():
+		output = []
+		data = getSideFromPhone()
+		#print(data)
+		data = data.split("INSERT INTO \"table\"(display_name,ROWID,handle_id,chat_identifier,text) VALUES(")
+		for elem in data:
+			if elem == "":
+				continue
+			currentIndex = 0
+			#print("elem:",elem)
+			tempVal = elem.replace("INSERT INTO \"table\"(display_name,ROWID,handle_id,chat_identifier,text) VALUES(","").replace(");","")
+			#print("tempVal:",tempVal)
+			#get displayName
+			endIndex = tempVal.index(",")
+			display_name = tempVal[currentIndex:endIndex]
+			display_name = display_name[1:-1]
+			currentIndex = endIndex+1
+			#print("displayName is: ",display_name)
+			#get row id
+			endIndex = tempVal.index(",",currentIndex)
+			rowID = tempVal[currentIndex:endIndex]
+			#print("rowID",rowID)
+			currentIndex = endIndex+1
+			#get handle id
+			endIndex = tempVal.index(",",currentIndex)
+			handle_id = tempVal[currentIndex:endIndex]
+			currentIndex = endIndex+1
+			#print("handle_id",handle_id)
+			#get chat idenentifier
+			endIndex = tempVal.index(",",currentIndex)
+			chat_identifier = tempVal[currentIndex:endIndex]
+			chat_identifier = chat_identifier.replace("'","")
+			currentIndex = endIndex+1
+			#print("chat_identifier",chat_identifier)
+			#get message text
+			text = tempVal[currentIndex:]
+			text = text[1:-2]
+			#print(tempVal)
+			#print(rowID,handle_id,chat_identifier,text)
+			output.append({"display_name":display_name,"rowID":rowID, "handle_id":handle_id, "chat_identifier":chat_identifier,"text":text})
+		KeyboardSocketHandler.send_updates({"type":"side","data":output})
+
+	def updateMessageThread(message_id):
+		global currentThreadID
+		currentThreadID = message_id
+		output = []
+		data = getMessagesFromPhone(message_id)
+		data = data.split("INSERT INTO \"table\"(is_from_me,service,text) VALUES(")
+		for elem in data:
+			if elem == "":
+				continue
+			currentIndex = 0
+			#print("elem:",elem)
+			tempVal = elem.replace("INSERT INTO \"table\"(is_from_me,service,text) VALUES(","").replace(");","")
+			#print("tempVal:",tempVal)
+			#get is from Me
+			endIndex = tempVal.index(",")
+			is_from_me = tempVal[currentIndex:endIndex]
+			currentIndex = endIndex+1
+			#get service
+			endIndex = tempVal.index(",",currentIndex)
+			service = tempVal[currentIndex:endIndex]
+			service = service.replace("'","")
+			currentIndex = endIndex+1
+			#get message text
+			text = tempVal[currentIndex:]
+			text = text[1:-2]
+			#print(tempVal)
+			#print(is_from_me,service,text)
+			output.append({"is_from_me":is_from_me, "service":service, "text":text})
+		output.reverse()
+		KeyboardSocketHandler.send_updates({"type":"thread","data":output})
 	releaseList = []
 	pressList = []
 	
@@ -91,6 +167,13 @@ def start():
 			with open('.'+fileName, 'rb') as f:
 				self.set_header('Content-Type', contentType)
 				self.write(f.read())
+		def post(self):
+			global currentThreadID
+			print("successful post")
+			updateSide()
+			if currentThreadID != -1:
+				updateMessageThread(currentThreadID)
+			toaster.show_toast("Iphone Message","you triggered a refresh")
 
 
 	class KeyboardSocketHandler(tornado.websocket.WebSocketHandler):
@@ -105,64 +188,15 @@ def start():
 		def on_message(self, message):
 			message = message.split(",")
 			if message[0] == "side":
-				output = []
-				data = getSideFromPhone()
-				data = data.split("INSERT INTO \"table\"(ROWID,handle_id,chat_identifier,text) VALUES(")
-				for elem in data:
-					if elem == "":
-						continue
-					currentIndex = 0
-					#print("elem:",elem)
-					tempVal = elem.replace("INSERT INTO \"table\"(ROWID,handle_id,chat_identifier,text) VALUES(","").replace(");","")
-					#print("tempVal:",tempVal)
-					#get row id
-					endIndex = tempVal.index(",")
-					rowID = tempVal[currentIndex:endIndex]
-					currentIndex = endIndex+1
-					#get handle id
-					endIndex = tempVal.index(",",currentIndex)
-					handle_id = tempVal[currentIndex:endIndex]
-					currentIndex = endIndex+1
-					#get chat idenentifier
-					endIndex = tempVal.index(",",currentIndex)
-					chat_identifier = tempVal[currentIndex:endIndex]
-					chat_identifier = chat_identifier.replace("'","")
-					currentIndex = endIndex+1
-					#get message text
-					text = tempVal[currentIndex:]
-					text = text[1:-2]
-					#print(tempVal)
-					#print(rowID,handle_id,chat_identifier,text)
-					output.append({"rowID":rowID, "handle_id":handle_id, "chat_identifier":chat_identifier,"text":text})
-				self.send_updates({"type":"side","data":output})
+				updateSide()
 			if message[0] =="thread":
-				output = []
-				data = getMessagesFromPhone(message[1])
-				data = data.split("INSERT INTO \"table\"(is_from_me,service,text) VALUES(")
-				for elem in data:
-					if elem == "":
-						continue
-					currentIndex = 0
-					#print("elem:",elem)
-					tempVal = elem.replace("INSERT INTO \"table\"(is_from_me,service,text) VALUES(","").replace(");","")
-					#print("tempVal:",tempVal)
-					#get is from Me
-					endIndex = tempVal.index(",")
-					is_from_me = tempVal[currentIndex:endIndex]
-					currentIndex = endIndex+1
-					#get service
-					endIndex = tempVal.index(",",currentIndex)
-					service = tempVal[currentIndex:endIndex]
-					service = service.replace("'","")
-					currentIndex = endIndex+1
-					#get message text
-					text = tempVal[currentIndex:]
-					text = text[1:-2]
-					#print(tempVal)
-					#print(is_from_me,service,text)
-					output.append({"is_from_me":is_from_me, "service":service, "text":text})
-				output.reverse()
-				self.send_updates({"type":"thread","data":output})
+				updateMessageThread(message[1])
+			if message[0] =="send":
+				global ssh
+				command = 'clsms "'+message[2]+'" '+message[1] 
+				ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(command)
+				#updateMessageThread(message[1])
+
 
 		@classmethod
 		def send_updates(cls, keypress):
@@ -172,47 +206,6 @@ def start():
 					waiter.write_message(keypress)
 				except:
 					''''''
-
-			'''
-			var output = [];
-			//console.log(data);
-			data = data.replace(/INSERT INTO table VALUES/g, "‰‰");
-			var currentIndex = 0;
-			var cutLocation;
-			while(data.length>1)
-			{
-				let message = {"ROWID":null,"handle_id":null,"chat_identifier":null,"text":null}
-				cutLocation = data.indexOf(",");
-				message.ROWID = data.substring(3, cutLocation);
-				data = data.substr(cutLocation+1)
-
-				cutLocation = data.indexOf(",");
-				message.handle_id = data.substring(0, cutLocation);
-				data = data.substr(cutLocation+1)
-
-				cutLocation = data.indexOf(",");
-				var chatFormat = data.indexOf("'");
-				if( chatFormat < cutLocation)
-				{
-					message.chat_identifier = data.substring(1, cutLocation-1);
-				}else
-				{
-					message.chat_identifier = data.substring(0, cutLocation);
-				}
-				data = data.substr(cutLocation+2)
-
-				cutLocation = data.indexOf("');\n");
-				message.text = data.substring(0, cutLocation);
-				output.push(message);
-				data = data.substr(cutLocation+4)
-			}
-			socket.send({content:"side",messages:output});
-
-		'''
-
-
-
-
 	recorded = []
 	def print_pressed_keys(e):
 		if e.event_type == "down":

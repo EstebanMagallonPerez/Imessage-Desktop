@@ -5,6 +5,7 @@
 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
 		<link rel="stylesheet" type="text/css" href="./css/style.css">
+		<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap" rel="stylesheet">
 	</head>
 	<body>
 		<div class="pageContainer">
@@ -103,7 +104,7 @@
 			if (!window.console.log) window.console.log = function() {};
 			updater.start();
 		}, false);
-
+		var numToSend = -1;
 		var updater = {
 			socket: null,
 
@@ -125,7 +126,15 @@
 					var fillString = "";
 					for(var i =0;i<message.data.length;i++)
 					{
-						fillString+="<a class='plainText' href='#' onclick=getMessages('"+message.data[i].chat_identifier+"')><li><div>"+ message.data[i].chat_identifier+"</div><div>"+message.data[i].text+"</div></li><a><hr>";
+						fillString+="<a class='plainText' href='#' onclick=getMessages('"+message.data[i].chat_identifier+"')><li><div>"
+						if(message.data[i].display_name != "")
+						{
+							fillString+=message.data[i].display_name;
+						}else
+						{
+							fillString+=message.data[i].chat_identifier;
+						}
+						fillString+="</div><div>"+message.data[i].text+"</div></li><a><hr>";
 					}
 					document.getElementById("populateList").innerHTML = fillString;
 				}
@@ -164,6 +173,24 @@
 		{
 			numToSend = parseInt(chat_identifier);
 			updater.socket.send(["thread",chat_identifier])
+		}
+
+		function sendMessage()
+		{
+			if(numToSend == -1)
+			{
+				alert("Select a chat to send a message");
+				return;
+			}
+			if (isNaN(numToSend))
+			{
+				alert("I said it was a work in progress right? group chats are not currently supported, and neither are emails");
+
+				return;
+			}
+
+			updater.socket.send(["send", numToSend, document.getElementById("textContent").value])
+			document.getElementById("textContent").value = "";
 		}
 
 		function press(data) {
